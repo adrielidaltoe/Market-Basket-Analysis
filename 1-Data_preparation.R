@@ -148,7 +148,13 @@ dim(df) # Remaining 528059 rows
 # InvoiceNo and Description to the analysis. In this way the missing values in CustomerID do 
 # not need to be treated.
 
+# Looking for duplicated entries in the dataset
+duplicate_rows <- c(paste(df$InvoiceNo, df$Description, sep = ' '))
+df <- df[!duplicated(duplicate_rows),]
+
+dim(df)
+
 # Saving the dataframe
-write.csv(df, file = 'retail.csv', row.names = FALSE)
+write.csv(df, file = 'retail_clean.csv', row.names = FALSE)
 
 # In script 2-Exploratory_data_analysis.R you find part-2 of this project.

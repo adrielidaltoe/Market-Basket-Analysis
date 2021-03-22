@@ -1,129 +1,120 @@
-# In this part, I'm going to apply the apriori algorithm to create the association rules
-
-# In order to perform apriori algorithm we need a data set that has transactions and items. A transaction,
-# in this context, is how the items are arranged. A single transaction will have one or multiple items.
-# The data can be arranged into an item list, in which each object will be a transaction; or a binary 
-# (sparse) matrix, where each row represents a transaction. Both structures can be transformed into a 
-# transaction object.
+#########################################################################################
 
 
-setwd("D:/FCD/Projetos/Market_basket_analysis")
+        # Market Basket Analysis - Part 3 - Mining Association Rules
 
+
+#########################################################################################
+
+setwd("D:/DataScienceAcademy/FCD/Projetos/Market_basket_analysis/Market-Basket-Analysis")
+
+# Attribute Information:
+
+# InvoiceNo: Number uniquely assigned to each transaction.
+# StockCode: Product code. Number uniquely assigned to each distinct product.
+# Description: Product (item) name.
+# Quantity: The quantities of each product (item) per transaction. 
+# InvoiceDate: The day and time when each transaction was generated.
+# UnitPrice: Product price per unit in sterling.
+# CustomerID: Number uniquely assigned to each customer.
+# Country: Country where each customer resides.
+
+# Import packages
 library(readr)
-library(plyr)
-library(dplyr)
+library(ggplot2)
 library(tidyr)
+library(dplyr)
 library(arules)
 library(arulesViz)
 
+# In this part, the apriori algorithm will be used to create the association rules
+
+# In order to perform apriori algorithm we need a data set that has transactions and items. 
+# A single transaction will have one or multiple items. The data can be arranged into an
+# item list, in which each object will be a transaction; or a binary (sparse) matrix, 
+# where each row represents a transaction and items are distributed in columns.
+# Both structures can be transformed into a transaction object.
+
+
+
 # Importando os dados limpos
-df <- read_csv('retail.csv')
+df <- read_csv('retail_clean.csv')
 View(df)
-dim(df) # 528057     11
-glimpse(df)
+dim(df)
 
 
-df <- df %>%
-  mutate(InvoiceNo = as.factor(InvoiceNo)) %>%
-  mutate(Description = as.factor(Description)) %>%
-  mutate(Date = as.Date(Date))
+# Arules requires the data to be in the form of transactions, where each row represent a transaction
+# and each product is a column. Here I show two ways of doing that:
 
-# Looking for duplicated entries in the dataset
-df$Inv_Desc <- c(paste(df$InvoiceNo, df$Description, sep = ' '))
-length(which(duplicated(df$Inv_Desc))) #  10794 lines were duplicated
-length(unique(df$Inv_Desc))
-df <- df[!duplicated(df$Inv_Desc), ]
-dim(df) # 517263     11
+# 1) Create a sparse matrix and then transform it into an arule transactions object
+sparce_matrix <- df %>% 
+  select(InvoiceNo, Description) %>%
+  mutate(value = 1) %>% 
+  spread(Description, value, fill = 0) %>%
+  select(-InvoiceNo)
 
-# Calculating the supporting values for the products
+View(sparce_matrix)
 
-# Proportion of each item in total volume of sales (total number of products saled)
-df %>% group_by(Description) %>% summarize(n = n()) %>% mutate(support = n / sum(n)) %>%
-  arrange(desc(support))
+transaction_matrix <- as(as.matrix(sparce_matrix), 'transactions')
+class(transaction_matrix)
+summary(transaction_matrix)
 
-# Proportion that each item appeared in each purchase (aprox. support value)
-df %>% group_by(Description) %>% summarize(n = n()) %>% mutate(support = n / 19789) %>%
-  arrange(desc(support)) %>% filter(Description == 'BLUE POLKADOT BEAKER')
-
-
-
-
-# Apriori uses these support values
-
-## Creating the item list and obtaining the transaction object
+# 2) Create an item list and then the arule transactions object
 transaction <- split(df$Description,df$InvoiceNo)
 class(transaction)
 
 basket <- as(transaction, 'transactions')
-summary(basket)
+class(basket)
+bask_summary <- summary(basket)
 
-## Creating a csv file. THE RESULT DID NOT CORRESPOND TO THE ORIGINAL DATA
+# Both methods result in the same arule transctions object.However, the second method is easier to use.
+# Let's investigate the transactions object basket.
 
-transactionData <- ddply(df,c('InvoiceNo', 'Date'),
-                         function(df1){paste(df1$Description, collapse = ',')})
+# There is 19791 transactions and a total of 3994 different products
+bask_summary@Dim
 
-# Removing the columns InvoiceNo and Date because they will not be necessary
-transactionData <- transactionData %>% select(V1)
-colnames(transactionData) <- c('Items')
+# Checking if basket object (the transaction object) is consistent with the data 
+bask_summary@itemSummary
+freqItem_support
+# Notice that the frequency of top 5 most frequent products in transactions are the same.
 
-# Saving the transaction data
-write.csv(transactionData, "transacoes.csv", quote = FALSE, row.names = FALSE)
+# How many items there are in each transaction?
+bask_summary@lengths
 
-# Now we are ready to apply the apriori algorithm
-?read.transactions
-transactions <- read.transactions('transacoes.csv', format = 'basket', sep = ",", 
-                                  rm.duplicates = FALSE)
-summary(transactions)
+### Mining the association rules with Apriori
+# The number of rules will be controlled by setting values for support, confidence and
+# the maximum number of items in a rule.
 
-## Creating a logical matrix
-df1 <- df %>% 
-  select(InvoiceNo, Description) %>%
-  mutate(value = TRUE) %>% 
-  spread(Description, value, fill = FALSE) %>%
-  select(-InvoiceNo)
-View(head(df1[,c(1:10)]))
-transaction.obj <- as.matrix(df1) %>% as('transactions')
-summary(transaction.obj)
+rules <- apriori(basket, parameter = list(supp=0.01, conf = 0.7))
 
-# Create a visualization from the transaction object
-library(RColorBrewer)
-itemFrequencyPlot(transaction.obj, topN = 10, type = 'absolute', 
-                  col=brewer.pal(8,'Pastel2'), 
-                  main = 'Absolute Item Frequency Plot')
-
-
-### Applying the apriori algorithm
-# Finding the association rules
-?apriori
-rules <- apriori(transaction.obj, parameter = list(supp=0.01,maxlen=10))
+# 254 rules were found 
 summary(rules)
-rules <- sort(rules, by='lift', decreasing = TRUE)
-inspect(rules[1:10])
+inspect(head(rules, n = 10, by ="lift"))
 
-rules1 <- apriori(transaction.obj, parameter = list(supp=0.002, maxlen = 3))
-rules1 <- sort(rules1, by='support', decreasing = TRUE)
-summary(rules1)
-inspect(rules1[1:10])
+# Visualize rules in a dataset
+rules_dataframe <- DATAFRAME(rules)[, -c(5)]
+View(rules_dataframe[c(1:10)*10,] %>%
+       arrange(desc(lift)))
 
-
-## Association rules for 
-whiteHang.rules = apriori(transaction.obj, parameter = list(supp=0.003),
-                          appearance = list(lhs="WHITE HANGING HEART T-LIGHT HOLDER",default="rhs"))
-
-whiteHang.rules = apriori(transaction.obj, parameter = list(supp=0.003, conf = 0.8, maxlen = 2),
-                          appearance = list(default="lhs", rhs="WHITE HANGING HEART T-LIGHT HOLDER"))
-
-summary(whiteHang.rules)
-whiteHang.rules <- sort(whiteHang.rules, by = 'lift', decreasing = TRUE)
-inspect(whiteHang.rules)
 
 # Visualizing Association Rules
-plot(rules)
-plot(rules1)
+plot(rules, main = '254 regras de associação')
 
 # Two-key-point
-plot(rules, method = 'two-key plot')
-plot(rules1, method = 'two-key plot')
+plot(rules, method = 'two-key plot', main = 'Número de itens por regra de associação')
+
 
 # Graph-based visualizations
-plot(rules[1:20], method = "graph",  engine = "htmlwidget")
+plot(rules, method = "graph",  engine = "htmlwidget")
+rulesinspect(rules[1:20])
+
+
+# Removing subset of rules
+subsetRules <- which(colSums(is.subset(rules, rules)) > 1) # get subset rules in vector
+length(subsetRules)  #> 135
+rules_filtered <- rules[-subsetRules] # remove subset rules. 
+summary(rules_filtered)
+View(DATAFRAME(rules_filtered)[, -c(5)] %>%
+       arrange(desc(lift)))
+
+plot(rules_filtered, method = "graph",  engine = "htmlwidget")
