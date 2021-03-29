@@ -224,14 +224,24 @@ df %>% mutate(Value = Quantity*UnitPrice) %>%
   labs(x = 'Average value per purchase')
 
 # Which countries they sell their goods?
-?treemap
-treemap(df,
-        index = c("Country"),
-        vSize = "Quantity",
+df_treemap <- df %>% distinct(InvoiceNo, .keep_all = TRUE) %>%
+  group_by(Country) %>%
+  count()
+
+treemap(df_treemap,
+        index = c("Country",'n'),
+        vSize = "n",
         title = "",
         palette = "Paired",
-        border.col = "grey40")
-
+        border.col = "grey40",
+        fontsize.labels=c(12,10),   # size of labels. Give the size per level of aggregation: size for group, size for subgroup, sub-subgroups...
+        fontface.labels=c(2,1),     # Font of labels: 1,2,3,4 for normal, bold, italic, bold-italic...
+        bg.labels=c("transparent"), # Background color of labels
+        align.labels=list(
+          c("center", "center"), 
+          c('right', 'top')),       # Where to place labels in the rectangle?
+        overlap.labels=0.5,               
+        inflate.labels=F)
 
 # Amount of sales in each day.
 g5 <- df %>% group_by(InvoiceNo) %>%
